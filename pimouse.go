@@ -74,12 +74,19 @@ func main() {
     }
 }
 
+var mouse_buttons = map[uint16]byte {
+    272: 1,
+    273: 2,
+    274: 4,
+}
+
 //func hook_mouse(mouse_device *evdev.InputDevice, mouse_config string, gadget_device *os.File, mouse_path string, mice_hooked *[]string) error {
 func hook_mouse(mouse_device *evdev.InputDevice, gadget_device *os.File) error {
     fmt.Println(mouse_device)
 
     // main mouse_device event loop
     mouse_device.Grab()
+    gadget_bytes := make([]byte, 3)
     for {
         // check if events can be read from mouse_device (if mouse is still connected)
         mouse_events, err := mouse_device.Read()
@@ -100,13 +107,29 @@ func hook_mouse(mouse_device *evdev.InputDevice, gadget_device *os.File) error {
             //[2, 0, 0] right mouse (3)
 
             fmt.Println(mouse_event.Type, mouse_event.Code, mouse_event.Value)
-            if mouse_event.Code == 0 {
-                // x axis
-                type_bytes(gadget_device, []byte{0, uint8(mouse_event.Value), 0})
-            } else if mouse_event.Code == 1 {
-                // y axis
-                type_bytes(gadget_device, []byte{0, 0, uint8(mouse_event.Value)})
+            // button event
+            if mouse_event.Type == 1 {
+                if button_byte, ok := mouse_buttons[mouse_event.Code]; ok {
+                    if mouse_event.Value == 1 {
+                        gadget_bytes[0] = button_byte
+                    } else {
+                        gadget_bytes[0] = byte(0)
+                    }
+                }
+            // movement event
+            } else if mouse_event.Type == 2 {
+                if mouse_event.Code == 0 {
+                    // x axis
+                    gadget_bytes[1] = byte(mouse_event.Value)
+                } else if mouse_event.Code == 1 {
+                    // y axis
+                    gadget_bytes[2] = byte(mouse_event.Value)
+                }
+            } else if mouse_event.Type == 0 {
+                gadget_bytes[1] = byte(0)
+                gadget_bytes[2] = byte(0)
             }
+            type_bytes(gadget_device, gadget_bytes)
         }
     }
 }
