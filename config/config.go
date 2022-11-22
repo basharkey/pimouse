@@ -1,7 +1,6 @@
 package config
 
 import (
-    "fmt"
     "io/ioutil"
     "gopkg.in/yaml.v3"
 )
@@ -44,8 +43,11 @@ func Parse(configPath string) (MouseConfig, error) {
 
     // initialize mouseConfig
     mouseConfig := MouseConfig{}
+    mouseConfig.ButtonMap = make(map[uint16]byte)
     // add default ButtonMap to mouseConfig
-    mouseConfig.ButtonMap = buttonCodes
+    for key, value := range buttonCodes {
+        mouseConfig.ButtonMap[key] = value
+    }
 
     for key, value := range configData {
         // modify ButtonMap
