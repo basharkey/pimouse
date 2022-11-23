@@ -1,0 +1,9 @@
+[Unit]
+Description = PiMouse Mouse Gadget
+
+[Service]
+Type=simple
+ExecStart = /usr/local/bin/pimouse
+
+[Install]
+WantedBy = multi-user.target
