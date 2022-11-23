@@ -18,7 +18,7 @@ func main() {
     gadget.Initialize()
 
     // open usb gadget device for write only
-    gadget_device, err := os.OpenFile(
+    gadgetDevice, err := os.OpenFile(
         "/dev/hidg0",
         os.O_WRONLY,
         0000,
@@ -26,49 +26,51 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    defer gadget_device.Close()
 
-    var mice_hooked []string
+    defer gadgetDevice.Close()
+
+    var miceHooked []*evdev.InputDevice
     for {
-        // I don't think this will ever error for no mice being plugged in
-        // errors would probably be related to permissions issues
-        mice_paths, err := get_mice_paths("/dev/input/by-id/")
+        micePaths, err := getMicePaths("/dev/input/by-id/")
         if err != nil {
-            log.Fatal(err)
+            // errors when no usb devices plugged in
+            fmt.Printf("\rWaiting no devices found...")
         } else {
             next:
-            for _, mouse_path := range mice_paths {
+            for _, mousePath := range micePaths {
                 // don't hook mice that are already hooked
-                for _, mouse_hooked := range mice_hooked {
-                    if mouse_path == mouse_hooked {
+                for _, mouseHooked := range miceHooked {
+                    if mousePath == mouseHooked.Fn {
                         continue next
                     }
                 }
 
-                mouse_device, err := evdev.Open(mouse_path)
+                mouseDevice, err := evdev.Open(mousePath)
                 if err != nil {
                     fmt.Println(err)
                 } else {
-                    // load default.conf config if mouse_device specific one does not exist
-                    var mouse_config string
-                    config_dir := "/etc/pimouse"
-                    default_mouse_config := filepath.Join(config_dir, "default.yaml")
-                    custom_mouse_config := filepath.Join(config_dir, filepath.Base(mouse_path) + ".yaml")
+                    // load default.conf config if mouseDevice specific one does not exist
+                    var configPath string
+                    configDir := "/etc/pimouse"
+                    configPathDefault := filepath.Join(configDir, "default.yaml")
+                    configPathCustom := filepath.Join(configDir, filepath.Base(mousePath) + ".yaml")
 
-                    _, err = os.Stat(custom_mouse_config)
+                    _, err = os.Stat(configPathCustom)
                     if errors.Is(err, os.ErrNotExist) {
-                        fmt.Println("Using default config can't find: ", custom_mouse_config)
-                        mouse_config = default_mouse_config
+                        configPath = configPathDefault
                     } else {
-                        mouse_config = custom_mouse_config
+                        configPath = configPathCustom
                     }
-                    mouseConfig, _ := config.Parse(mouse_config)
+                    config, _ := config.Parse(configPath)
 
-                    // track mice that are currently connected and hooked in mice_hooked slice
-                    mice_hooked = append(mice_hooked, mouse_path)
+                    // track mice that are currently connected and hooked in miceHooked slice
+                    miceHooked = append(miceHooked, mouseDevice)
+
+                    fmt.Printf("\nConnected \"%s\"\n", mouseDevice.Name)
+                    fmt.Printf("  Device %s\n", mouseDevice.Fn)
+                    fmt.Printf("  Config %s\n", configPath)
                     // hook the mouse
-                    //go hook_mouse(mouse_device, mouse_config, gadget_device, mouse_path, &mice_hooked)
-                    go hook_mouse(mouse_device, mouseConfig, gadget_device)
+                    go hookMouse(mouseDevice, config, gadgetDevice, &miceHooked)
                 }
             }
         }
@@ -76,57 +78,63 @@ func main() {
     }
 }
 
-func hook_mouse(mouse_device *evdev.InputDevice, mouseConfig config.MouseConfig, gadget_device *os.File) error {
-    fmt.Println(mouse_device)
-
-    // main mouse_device event loop
-    mouse_device.Grab()
-    gadget_bytes := make([]byte, 4)
+func hookMouse(mouseDevice *evdev.InputDevice, config config.MouseConfig, gadgetDevice *os.File, miceHooked *[]*evdev.InputDevice) {
+    // main mouseDevice event loop
+    mouseDevice.Grab()
+    gadgetBytes := make([]byte, 4)
     for {
-        // check if events can be read from mouse_device (if mouse is still connected)
-        mouse_events, err := mouse_device.Read()
+        // read events from mouseDevice
+        mouseEvents, err := mouseDevice.Read()
+
+        // if events cannot be read from mouseDevice remove mouse from miceHooked and exit goroutine
         if err != nil {
-            // remove mouse from hooked mice if it has been disconnected
-            return err
+            for i, mouseHooked := range *miceHooked {
+                if mouseDevice == mouseHooked {
+                    (*miceHooked)[i] = (*miceHooked)[len(*miceHooked)-1]
+                    *miceHooked = (*miceHooked)[:len(*miceHooked)-1]
+                }
+            }
+            fmt.Printf("\nDisconnected \"%s\"\n", mouseDevice.Name)
+            return
         }
 
-        for _, mouse_event := range mouse_events {
+        for _, mouseEvent := range mouseEvents {
             // button event
-            if mouse_event.Type == 1 {
-                if button_byte, ok := mouseConfig.ButtonMap[mouse_event.Code]; ok {
-                    if mouse_event.Value == 1 {
-                        gadget_bytes[0] = button_byte
+            if mouseEvent.Type == 1 {
+                if button_byte, ok := config.ButtonMap[mouseEvent.Code]; ok {
+                    if mouseEvent.Value == 1 {
+                        gadgetBytes[0] = button_byte
                     } else {
-                        gadget_bytes[0] = byte(0)
+                        gadgetBytes[0] = byte(0)
                     }
                 }
             // movement event
-            } else if mouse_event.Type == 2 {
+            } else if mouseEvent.Type == 2 {
                 // x axis
-                if mouse_event.Code == 0 {
-                    gadget_bytes[1] = byte(mouse_event.Value)
-                    gadget_bytes[2] = byte(0)
+                if mouseEvent.Code == 0 {
+                    gadgetBytes[1] = byte(mouseEvent.Value * int32(config.CursorSpeed))
+                    gadgetBytes[2] = byte(0)
                 // y axis
-                } else if mouse_event.Code == 1 {
-                    gadget_bytes[2] = byte(mouse_event.Value)
-                    gadget_bytes[1] = byte(0)
+                } else if mouseEvent.Code == 1 {
+                    gadgetBytes[2] = byte(mouseEvent.Value * int32(config.CursorSpeed))
+                    gadgetBytes[1] = byte(0)
                 // scroll event
-                } else if mouse_event.Code == 8 {
-                    gadget_bytes[3] = byte(mouse_event.Value)
+                } else if mouseEvent.Code == 8 {
+                    gadgetBytes[3] = byte(mouseEvent.Value * int32(config.ScrollSpeed))
                 }
-            } else if mouse_event.Type == 0 {
-                gadget_bytes[1] = byte(0)
-                gadget_bytes[2] = byte(0)
-                gadget_bytes[3] = byte(0)
+            } else if mouseEvent.Type == 0 {
+                gadgetBytes[1] = byte(0)
+                gadgetBytes[2] = byte(0)
+                gadgetBytes[3] = byte(0)
             }
-            fmt.Println("raw:", mouse_event.Type, mouse_event.Code, mouse_event.Value, "gadget:", gadget_bytes)
-            gadget_device.Write(gadget_bytes)
+            //fmt.Println("event:", mouseEvent.Type, mouseEvent.Code, mouseEvent.Value, "gadget:", gadgetBytes)
+            gadgetDevice.Write(gadgetBytes)
         }
     }
 }
 
-func get_mice_paths(base_path string) ([]string, error) {
-    dir, err := os.Open(base_path)
+func getMicePaths(basePath string) ([]string, error) {
+    dir, err := os.Open(basePath)
     if err != nil {
         return nil, err
     }
@@ -136,11 +144,11 @@ func get_mice_paths(base_path string) ([]string, error) {
         return nil, err
     }
 
-    var mice_paths []string
+    var micePaths []string
     for _, device := range devices {
         if strings.Contains(device.Name(), "event-mouse") {
-            mice_paths = append(mice_paths, base_path + device.Name())
+            micePaths = append(micePaths, basePath + device.Name())
         }
     }
-    return mice_paths, nil
+    return micePaths, nil
 }

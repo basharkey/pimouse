@@ -7,7 +7,8 @@ import (
 
 type MouseConfig struct {
     ButtonMap map[uint16]byte
-    ScrollSpeed int
+    ScrollSpeed int32
+    CursorSpeed int32
 }
 
 var buttonCodes = map[uint16]byte {
@@ -57,7 +58,9 @@ func Parse(configPath string) (MouseConfig, error) {
             }
         // modify ScrollSpeed
         } else if key == "scrollSpeed" {
-            mouseConfig.ScrollSpeed = value.(int)
+            mouseConfig.ScrollSpeed = int32(value.(int))
+        } else if key == "cursorSpeed" {
+            mouseConfig.CursorSpeed = int32(value.(int))
         }
     }
     return mouseConfig, nil

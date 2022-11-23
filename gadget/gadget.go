@@ -2,23 +2,21 @@ package gadget
 
 import (
     "os"
-    //"log"
-    "fmt"
     "path/filepath"
     "os/exec"
 )
 
-var base_dir = "/sys/kernel/config/usb_gadget/pimouse"
+var dirBase = "/sys/kernel/config/usb_gadget/pimouse"
 
-var usb_string = "0x409"
-var usb_config = "c.1"
-var usb_device = "hid.usb0"
+var usbString = "0x409"
+var usbConfig = "c.1"
+var usbDevice = "hid.usb0"
 
-var strings_dir = filepath.Join("strings", usb_string)
-var configs_dir = filepath.Join("configs", usb_config)
-var functions_dir = filepath.Join("functions", usb_device)
+var dirStrings = filepath.Join("strings", usbString)
+var dirConfigs = filepath.Join("configs", usbConfig)
+var dirFunctions = filepath.Join("functions", usbDevice)
 
-func Initialize() {
+func Initialize() error {
 
     var files = [][]string {
         {"idVendor", "0xbeaf"}, // Linux Foundation
@@ -26,18 +24,18 @@ func Initialize() {
         {"bcdDevice", "0x0100"}, // v1.0.0
         {"bcdUSB", "0x0200"}, // USB2
 
-        {filepath.Join(strings_dir, "serialnumber"), "fedcba9876543210"},
-        {filepath.Join(strings_dir, "manufacturer"), "PiMouse"},
-        {filepath.Join(strings_dir, "product"), "USB Mouse Device"},
+        {filepath.Join(dirStrings, "serialnumber"), "fedcba9876543210"},
+        {filepath.Join(dirStrings, "manufacturer"), "PiMouse"},
+        {filepath.Join(dirStrings, "product"), "USB Mouse Device"},
 
-        {filepath.Join(configs_dir, strings_dir, "configuration"), "Config 1: ECM network"},
-        {filepath.Join(configs_dir, "MaxPower"), "250"},
+        {filepath.Join(dirConfigs, dirStrings, "configuration"), "Config 1: ECM network"},
+        {filepath.Join(dirConfigs, "MaxPower"), "250"},
 
-        {filepath.Join(functions_dir, "protocol"), "1"},
-        {filepath.Join(functions_dir, "subclass"), "1"},
-        {filepath.Join(functions_dir, "report_length"), "8"},
+        {filepath.Join(dirFunctions, "protocol"), "1"},
+        {filepath.Join(dirFunctions, "subclass"), "1"},
+        {filepath.Join(dirFunctions, "report_length"), "8"},
         // sudo usbhid-dump -d beaf | tail -n +2 | xxd -r -p | hidrd-convert -o spec
-        {filepath.Join(functions_dir, "report_desc"),
+        {filepath.Join(dirFunctions, "report_desc"),
             "\x05\x01" + // Usage Page (Desktop)
             "\x09\x02" + // Usage (Mouse)
             "\xa1\x01" + // Collection (Application)
@@ -86,64 +84,75 @@ func Initialize() {
     }
 
     for _, file := range files {
-        write_to_file(filepath.Join(base_dir, file[0]), file[1])
+        writeFile(filepath.Join(dirBase, file[0]), file[1])
     }
 
-    link := filepath.Join(base_dir, functions_dir)
-    target := filepath.Join(base_dir, filepath.Join(configs_dir, usb_device))
+    link := filepath.Join(dirBase, dirFunctions)
+    target := filepath.Join(dirBase, filepath.Join(dirConfigs, usbDevice))
     os.Symlink(link, target)
 
     dir, err := os.Open("/sys/class/udc/")
-    check_err(err)
+    if err != nil {
+        return err
+    }
+
     file, err := dir.Readdir(0)
-    check_err(err)
-    write_to_file(filepath.Join(base_dir, "UDC"), file[0].Name())
+    if err != nil {
+        return err
+    }
+
+    err = writeFile(filepath.Join(dirBase, "UDC"), file[0].Name())
+    if err != nil {
+        return err
+    }
+    return nil
 }
 
 func Destroy() {
-    var base_dir string = "/sys/kernel/config/usb_gadget/pimouse"
+    var dirBase string = "/sys/kernel/config/usb_gadget/pimouse"
     // clear UDC file data, don't think there is a way to do this with pure go
     //https://askubuntu.com/questions/823380/cannot-delete-residual-system-files-period-even-after-changing-permissions-as-r
-    cmd := exec.Command("/usr/bin/env", "bash", "-c", "echo '' > " + filepath.Join(base_dir, "UDC"))
+    cmd := exec.Command("/usr/bin/env", "bash", "-c", "echo '' > " + filepath.Join(dirBase, "UDC"))
     cmd.Run()
 
-    var gadget_files =  []string {
+    var gadgetFiles =  []string {
         // remove strings from configs
-        filepath.Join(base_dir, configs_dir, strings_dir),
+        filepath.Join(dirBase, dirConfigs, dirStrings),
         // remove functions from configs
-        filepath.Join(base_dir, configs_dir, usb_device),
+        filepath.Join(dirBase, dirConfigs, usbDevice),
         // remove configs
-        filepath.Join(base_dir, configs_dir),
+        filepath.Join(dirBase, dirConfigs),
         // remove functions
-        filepath.Join(base_dir, functions_dir),
+        filepath.Join(dirBase, dirFunctions),
         // remove strings
-        filepath.Join(base_dir, strings_dir),
+        filepath.Join(dirBase, dirStrings),
         // remove gadget
-        base_dir,
+        dirBase,
     }
 
-    for _, file := range gadget_files {
+    for _, file := range gadgetFiles {
         os.Remove(file)
     }
 }
 
-func check_err(err error) {
-    if err != nil {
-        //log.Fatal(err)
-        fmt.Println(err)
-    }
-}
-
-func write_to_file(file_path string, file_content string) {
-    file_dir := filepath.Dir(file_path)
-    _, err := os.Stat(file_dir)
+func writeFile(filePath string, fileContent string) error {
+    fileDir := filepath.Dir(filePath)
+    _, err := os.Stat(fileDir)
     if os.IsNotExist(err) {
-        err := os.MkdirAll(file_dir, 0644)
-        check_err(err)
+        err := os.MkdirAll(fileDir, 0644)
+        if err != nil {
+            return err
+        }
     }
 
-    file, err := os.Create(file_path)
-    check_err(err)
-    _, err = file.WriteString(file_content)
-    check_err(err)
+    file, err := os.Create(filePath)
+    if err != nil {
+        return err
+    }
+
+    _, err = file.WriteString(fileContent)
+    if err != nil {
+        return err
+    }
+    return nil
 }
