@@ -21,13 +21,12 @@ func main () {
     check_err(err)
     defer gadget_device.Close()
 
-    var x int8 = -128
-    var y int8 = 127
+    var val int8
+    val = 0
 
     time.Sleep(2 * time.Second)
-    type_bytes(gadget_device, []byte{0, uint8(x), uint8(y)})
-    time.Sleep(2 * time.Second)
-    type_bytes(gadget_device, []byte{0, 0, 0,})
+    type_bytes(gadget_device, []byte{255, 0, 0, byte(val)})
+    type_bytes(gadget_device, []byte{0, 0, 0, 0})
 }
 
 func type_bytes(gadget_device *os.File, key_bytes []byte) {
