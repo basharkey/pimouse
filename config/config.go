@@ -51,6 +51,10 @@ func Parse(configPath string) (MouseConfig, error) {
     }
 
     for key, value := range configData {
+	if value == nil {
+	  continue
+	}
+
         // modify ButtonMap
         if key == "buttons" {
             for input, output := range value.(map[string]interface{}) {
