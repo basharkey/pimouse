@@ -123,3 +123,8 @@ button10
 button11
 button12
 ```
+
+## Latency
+PiMouse does not work well with high polling rate mice, this is due to a limitation with how fast mouse events can be read. I should probably write my own code to read mouse events faster. Currently each mouse movement event takes around 6-8 ms and click events 80-100 ms to read.
+
+I recommend you only use PiMouse with mice that have a 250 Hz polling rate.
