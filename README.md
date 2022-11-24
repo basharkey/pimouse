@@ -7,7 +7,7 @@ Mouse -> Raspberry Pi -> Computer
 ```
 
 ## Features
-- Mutli mouse support
+- Multi mouse support
 - Mouse button remapping
 - Scroll speed configuration
 - Mouse speed configuration (primitive)
