@@ -83,8 +83,10 @@ func hookMouse(mouseDevice *evdev.InputDevice, config config.MouseConfig, gadget
     mouseDevice.Grab()
     gadgetBytes := make([]byte, 4)
     for {
+	start := time.Now()
         // read events from mouseDevice
-        mouseEvents, err := mouseDevice.Read()
+        mouseEvent, err := mouseDevice.ReadOne()
+	elapsed := time.Since(start)
 
         // if events cannot be read from mouseDevice remove mouse from miceHooked and exit goroutine
         if err != nil {
@@ -98,38 +100,37 @@ func hookMouse(mouseDevice *evdev.InputDevice, config config.MouseConfig, gadget
             return
         }
 
-        for _, mouseEvent := range mouseEvents {
-            // button event
-            if mouseEvent.Type == 1 {
-                if button_byte, ok := config.ButtonMap[mouseEvent.Code]; ok {
-                    if mouseEvent.Value == 1 {
-                        gadgetBytes[0] = button_byte
-                    } else {
-                        gadgetBytes[0] = byte(0)
-                    }
+        // button event
+        if mouseEvent.Type == 1 {
+            if button_byte, ok := config.ButtonMap[mouseEvent.Code]; ok {
+                if mouseEvent.Value == 1 {
+                    gadgetBytes[0] = button_byte
+                } else {
+                    gadgetBytes[0] = byte(0)
                 }
-            // movement event
-            } else if mouseEvent.Type == 2 {
-                // x axis
-                if mouseEvent.Code == 0 {
-                    gadgetBytes[1] = byte(mouseEvent.Value * int32(config.CursorSpeed))
-                    gadgetBytes[2] = byte(0)
-                // y axis
-                } else if mouseEvent.Code == 1 {
-                    gadgetBytes[2] = byte(mouseEvent.Value * int32(config.CursorSpeed))
-                    gadgetBytes[1] = byte(0)
-                // scroll event
-                } else if mouseEvent.Code == 8 {
-                    gadgetBytes[3] = byte(mouseEvent.Value * int32(config.ScrollSpeed))
-                }
-            } else if mouseEvent.Type == 0 {
-                gadgetBytes[1] = byte(0)
-                gadgetBytes[2] = byte(0)
-                gadgetBytes[3] = byte(0)
             }
-            //fmt.Println("event:", mouseEvent.Type, mouseEvent.Code, mouseEvent.Value, "gadget:", gadgetBytes)
-            gadgetDevice.Write(gadgetBytes)
+        // movement event
+        } else if mouseEvent.Type == 2 {
+            // x axis
+            if mouseEvent.Code == 0 {
+                gadgetBytes[1] = byte(mouseEvent.Value * int32(config.CursorSpeed))
+                gadgetBytes[2] = byte(0)
+            // y axis
+            } else if mouseEvent.Code == 1 {
+                gadgetBytes[2] = byte(mouseEvent.Value * int32(config.CursorSpeed))
+                gadgetBytes[1] = byte(0)
+            // scroll event
+            } else if mouseEvent.Code == 8 {
+                gadgetBytes[3] = byte(mouseEvent.Value * int32(config.ScrollSpeed))
+            }
+        } else if mouseEvent.Type == 0 {
+            gadgetBytes[1] = byte(0)
+            gadgetBytes[2] = byte(0)
+            gadgetBytes[3] = byte(0)
         }
+        //fmt.Println("event:", mouseEvent.Type, mouseEvent.Code, mouseEvent.Value, "gadget:", gadgetBytes)
+        gadgetDevice.Write(gadgetBytes)
+	fmt.Println("event:", mouseEvent.Type, mouseEvent.Code, mouseEvent.Value, "gadget:", gadgetBytes, "time:", elapsed)
     }
 }
 
