@@ -83,10 +83,10 @@ func hookMouse(mouseDevice *evdev.InputDevice, config config.MouseConfig, gadget
     mouseDevice.Grab()
     gadgetBytes := make([]byte, 4)
     for {
-	start := time.Now()
+	//start := time.Now()
         // read events from mouseDevice
         mouseEvent, err := mouseDevice.ReadOne()
-	elapsed := time.Since(start)
+	//elapsed := time.Since(start)
 
         // if events cannot be read from mouseDevice remove mouse from miceHooked and exit goroutine
         if err != nil {
@@ -130,7 +130,7 @@ func hookMouse(mouseDevice *evdev.InputDevice, config config.MouseConfig, gadget
         }
         //fmt.Println("event:", mouseEvent.Type, mouseEvent.Code, mouseEvent.Value, "gadget:", gadgetBytes)
         gadgetDevice.Write(gadgetBytes)
-	fmt.Println("event:", mouseEvent.Type, mouseEvent.Code, mouseEvent.Value, "gadget:", gadgetBytes, "time:", elapsed)
+	//fmt.Println("event:", mouseEvent.Type, mouseEvent.Code, mouseEvent.Value, "gadget:", gadgetBytes, "time:", elapsed)
     }
 }
 
